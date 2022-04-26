@@ -1,0 +1,1245 @@
+---
+title: "Practicum2-part1 parsing-try2"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+library(XML)
+
+library(RSQLite)
+library(DBI)
+library(knitr)
+```
+
+# sets up the file names and paths
+```{r}
+fpath <- "~/Downloads/"
+fn <- "pubmed_sample.xml"
+fpn = paste0(fpath, fn)
+dbfile = "prac2_try2.sqlite"
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+
+# Set foreign key constraint on
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON
+```
+
+
+# Load XML into Document Object Model (DOM)
+```{r}
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(file = fpn)
+
+# get the root node of the DOM tree
+r <- xmlRoot(xmlDOM)
+```
+
+
+
+
+# Parse into a Data Frame
+
+```{r}
+numPA <- xmlSize(r)
+
+numArticle <- xmlSize(r)
+# should be 19
+
+```
+
+
+
+## Create Internal Data Frames:  Pagination.df
+```{r}
+Pagination.df <- data.frame (MedlinePgn = vector (mode = "character", numPA),
+                     stringsAsFactors = FALSE)
+
+
+# PubmedArticleSet - PubmedArticle - MedlineCitation - Article - Pagination
+
+
+for (i in 1:numPA)
+{
+  
+  Pagination.df$PaginationID[i] <- i
+  
+  #aPA => PubmedArticle 
+  aPA <- r[[i]]
+  
+  #aMC => MedlineCitation
+  aMC <- aPA[[1]]
+  
+  # atc => Article
+  atc <- aMC[[5]]
+  
+  # pgn => Pagination
+  pgn <- atc[[3]]
+
+  # mpgn => MedlinePgn
+  mpgn <- xmlValue(pgn[[1]])
+  
+  Pagination.df$MedlinePgn[i] <- mpgn
+}
+
+Pagination.df = Pagination.df[!duplicated(Pagination.df), ]
+Pagination.df$PaginationID <- seq(1, nrow(Pagination.df))
+
+Pagination.df
+```
+
+
+## Create Internal Data Frames: ELocationID.df
+```{r}
+ELocationID.df <- data.frame (
+                     ArticleID = vector (mode = "integer", 1000),
+                     EIdType = vector (mode = "character", 1000),
+                     ELocationID = vector (mode = "character", 1000),
+                     Validation = vector (mode = "character", 1000),
+                     stringsAsFactors = FALSE)
+
+
+# PubmedArticleSet - PubmedArticle - MedlineCitation - Article - ELocationID
+
+index = 1
+
+for (i in 1:numPA) {
+  #aPA => PubmedArticle 
+  aPA <- r[[i]]
+  
+  #aMC => MedlineCitation
+  aMC <- aPA[[1]]
+  
+  # atc => Article
+  atc <- aMC[[5]]
+  
+  # elocid => ELocationID
+  elocid <- atc[[4]]
+  elocName <- xmlName(elocid) 
+  if (!is.null(elocid)) {
+   if (!is.null(elocName) & elocName == "ELocationID") {
+     #elocidType => EIdType
+     elocidType <- xmlAttrs(elocid)[[1]]
+     
+     #elocVld => ValidYN
+     elocVld <- xmlAttrs(elocid)[[2]]
+     if (is.null(elocVld)) {
+       elocVld <- ""
+     }
+    
+     #elocidValue => ELocationID value
+     elocidValue <- xmlValue(elocid)
+     ELocationID.df$ArticleID[index] <- i
+     ELocationID.df$EIdType[index] <- elocidType
+     ELocationID.df$Validation[index] <- elocVld
+     ELocationID.df$ELocationID[index] <- elocidValue
+     index = index + 1
+
+   }
+  }
+  
+  # elocid => ELocationID
+  elocid2 <- atc[[5]]
+  if (!is.null(elocid2)) {
+    elocName2 <- xmlName(elocid2) 
+  
+     if (!is.null(elocName2) & elocName2 == "ELocationID") {
+           #elocidType => EIdType
+     elocidType2 <- xmlAttrs(elocid2)[[1]]
+     
+     #elocVld => ValidYN
+     elocVld2 <- xmlAttrs(elocid2)[[2]]
+     if (is.null(elocVld2)) {
+       elocVld2 <- ""
+     }
+     #elocidValue => ELocationID value
+     elocidValue2 <- xmlValue(elocid2)
+     ELocationID.df$ArticleID[index] <- i
+     ELocationID.df$EIdType[index] <- elocidType2
+     ELocationID.df$Validation[index] <- elocVld
+     ELocationID.df$ELocationID[index] <- elocidValue2
+     index = index + 1
+
+     }
+  }
+}
+
+
+ELocationID.df = ELocationID.df[!duplicated(ELocationID.df), ]
+ELocationID.df <- ELocationID.df[!apply(is.na(ELocationID.df) | ELocationID.df == "", 1, all),]
+
+ELocationID.df$ELocationIDNum <- seq(1, nrow(ELocationID.df))
+
+ELocationID.df
+```
+
+
+
+## Create Internal Data Frames: Abstract.df
+```{r}
+AbstractText.df <- data.frame (  
+                     AbstractID = vector (mode = "integer", 1000),
+                     Label = vector (mode = "character", 1000),
+                     NlmCategory = vector (mode = "character", 1000),
+                     Text = vector (mode = "character", 1000),
+                     stringsAsFactors = FALSE)
+
+Abstract.df <- data.frame (
+                     AbstractID = vector (mode = "integer", 19),
+                     CopyRightInfo = vector (mode = "character", 19),
+                     stringsAsFactors = FALSE)
+
+
+# PubmedArticleSet - PubmedArticle - MedlineCitation - Article - Abstract
+
+  abtIndex = 1
+
+  for (i in 1:numPA) {
+
+    #aPA => PubmedArticle 
+    aPA <- r[[i]]
+  
+    #aMC => MedlineCitation
+    aMC <- aPA[[1]]
+  
+    # atc => Article
+    atc <- aMC[[5]]
+  
+    # abs => Abstract
+    abs <- atc[[5]]
+    if (!is.null(abs)) {
+       absName <- xmlName(abs) 
+       if (!is.null(absName) & absName == "Abstract") {
+        abs <- atc[[5]]
+       } else {
+        abs <- atc[[6]]
+        absName <- xmlName(abs) 
+        if (!is.null(absName) & absName == "Abstract") {
+          abs <- atc[[6]]
+        }
+       }  
+ 
+         Abstract.df$AbstractID[i] <- i
+         Abstract.df$CopyRightInfo[i] <- ""
+
+         absn <- xmlSize(abs)
+         for (j in 1:absn) {
+            AbstractText.df$AbstractID[i] <- i
+            # could be AbstractText, or CopyrightInformation as the last item
+            item <- abs[[j]]
+            if (!is.null(item)) {
+              itemName <- xmlName(item)
+              if (!is.null(itemName) & itemName == "AbstractText") {
+                AbstractText.df$AbstractID[abtIndex] <- i
+                AbstractText.df$Text[abtIndex] <- ""
+                AbstractText.df$Label[abtIndex] <- ""
+                AbstractText.df$NlmCategory[abtIndex] <- ""
+
+                text <- xmlValue(item)
+                if (!is.null(text)) {
+                  AbstractText.df$Text[abtIndex] <- text
+                }  else {
+                  temp = ""
+                  AbstractText.df$Text[abtIndex] <- temp
+                }
+                
+                label <- xmlAttrs(item)[[1]]
+               
+                if (is.null(label)) {
+                  label <- ""
+                }
+                AbstractText.df$Label[abtIndex] <- label
+                nlmcategory <- xmlAttrs(item)[[2]]
+                if (is.null(nlmcategory)) {
+                  nlmcategory <- ""
+                }
+                AbstractText.df$NlmCategory[abtIndex] <- nlmcategory
+                abtIndex = abtIndex + 1
+              } else if (!is.null(itemName) & itemName == "CopyrightInformation") {
+                copyrightInfo <- xmlValue(item)
+                Abstract.df$CopyRightInfo[i] <- copyrightInfo
+              }
+         }
+       } 
+    }
+}
+
+AbstractText.df = AbstractText.df[!duplicated(AbstractText.df), ]
+AbstractText.df$AbstractTextID <- seq(1, nrow(AbstractText.df))
+
+AbstractText.df
+Abstract.df
+```
+
+
+
+## Create Internal Data Frames: Article.df
+```{r}
+Article.df <- data.frame ( 
+                     ArticleID = vector (mode = "integer", 100),
+                     PaginationID = vector (mode = "integer", 100),
+                     AbstractID = vector (mode = "integer", 100),
+                     AuthorListID = vector (mode = "integer", 100),
+                     ArticleDateID = vector (mode = "integer", 100),
+                     Language = vector (mode = "character", 100),
+                     ArticleTitle = vector (mode = "character", 100),
+                     stringsAsFactors = FALSE)
+
+
+
+for (i in 1:numPA) {
+    Article.df$ArticleID[i] <- i
+    Article.df$AuthorListID[i] <- i
+    Article.df$AbstractID[i] <- i
+    Article.df$PaginationID[i] <- i
+    #aPA => PubmedArticle 
+    aPA <- r[[i]]
+  
+    #aMC => MedlineCitation
+    aMC <- aPA[[1]]
+    
+    # atc => Article
+    atc <- aMC[[5]]
+    
+    lg <- ""
+    lang1 <- atc[[5]]
+ 
+    if (!is.null(lang1)) {
+       lang1Name <- xmlName(lang1) 
+       if (!is.null(lang1Name) & lang1Name == "Language") {
+        lg <- xmlValue(atc[[5]])
+       } else {
+         lang1 <- atc[[6]]
+         if (!is.null(lang1)) {
+           lang1Name <- xmlName(lang1) 
+           if (!is.null(lang1Name) & lang1Name == "Language") {
+             lg <- xmlValue(atc[[6]])
+           } else {
+           lang1 <- atc[[7]]
+         if (!is.null(lang1)) {
+           lang1Name <- xmlName(lang1) 
+           if (!is.null(lang1Name) & lang1Name == "Language") {
+             lg <- xmlValue(atc[[7]])
+           } else {
+             lang1 <- atc[[8]]
+         if (!is.null(lang1)) {
+           lang1Name <- xmlName(lang1) 
+           if (!is.null(lang1Name) & lang1Name == "Language") {
+             lg <- xmlValue(atc[[8]])
+           } 
+          }
+        }
+      }
+           
+     }
+   }
+  }
+    }
+    
+    #now lg is language node
+     Article.df$Language[i] <- lg
+     att <- atc[[2]]
+     Article.df$ArticleTitle[i] <- xmlValue(att)
+ 
+}
+```
+
+
+
+
+
+
+## Create Internal Data Frames: PublicationTypeList.df
+```{r}
+PublicationTypeList.df <- data.frame (
+                     PublicationType = vector (mode = "character", 100),
+                     ArticleID = vector (mode = "character", 100),
+                     stringsAsFactors = FALSE)
+
+
+# PubmedArticleSet - PubmedArticle - MedlineCitation - Article - PublicationTypeList
+
+offset = 0
+for (i in 1:numPA) {
+    #aPA => PubmedArticle 
+    aPA <- r[[i]]
+  
+    #aMC => MedlineCitation
+    aMC <- aPA[[1]]
+  
+    # atc => Article
+    atc <- aMC[[5]]
+    
+    # pubTypeList => PublicationTypeList
+    pubTypeList7 <- atc[[7]]
+    if (!is.null(pubTypeList7)) {
+       pubTypeListName7 <- xmlName(pubTypeList7) 
+       if (!is.null(pubTypeListName7) & pubTypeListName7 == "PublicationTypeList") {
+        ptl <- atc[[7]]
+       } else {
+         pubTypeList7 <- atc[[8]]
+         if (!is.null(pubTypeList7)) {
+           pubTypeListName7 <- xmlName(pubTypeList7) 
+           if (!is.null(pubTypeListName7) & pubTypeListName7 == "PublicationTypeList") {
+           ptl <- atc[[8]]
+          } else {
+           pubTypeList7 <- atc[[9]]
+           if (!is.null(pubTypeList7)) {
+             pubTypeListName7 <- xmlName(pubTypeList7) 
+             if (!is.null(pubTypeListName7) & pubTypeListName7 == "PublicationTypeList") {
+             ptl <- atc[[9]]
+           } else {
+             pubTypeList7 <- atc[[10]]
+             if (!is.null(pubTypeList7)) {
+               pubTypeListName7 <- xmlName(pubTypeList7) 
+               if (!is.null(pubTypeListName7) & pubTypeListName7 == "PublicationTypeList") {
+               ptl <- atc[[10]]
+               }
+             }
+         
+            }  
+          } 
+        }
+           
+      }
+    }
+    }
+    
+    # now the ptl is the PublicationTypeList node
+    
+    ptln <- xmlSize(ptl)
+    for (j in 1:ptln) { # goes through each PublicationType node
+      item <- xmlValue(ptl[[j]])
+      if(!is.null(item)) {
+        PublicationTypeList.df$PublicationType[i + offset] <- item
+        PublicationTypeList.df$ArticleID[i + offset] <- i
+        offset = offset + 1
+        PublicationTypeList.df$PublicationTypeCombinationID[i + offset]
+      }
+
+    }
+}
+
+PublicationTypeList.df = PublicationTypeList.df[!duplicated(PublicationTypeList.df), ]
+PublicationTypeList.df <- PublicationTypeList.df[!apply(is.na(PublicationTypeList.df) | PublicationTypeList.df == "", 1, all),]
+PublicationTypeList.df$PublicationTypeCombinationID <- seq(1, nrow(PublicationTypeList.df))
+
+
+PublicationTypeList.df
+```
+
+
+
+## Create Internal Data Frames: ArticleDate.df
+```{r}
+ArticleDate.df <- data.frame (  
+                     Year = vector (mode = "integer", 100),
+                     Month = vector (mode = "integer", 100),
+                     Day = vector (mode = "integer", 100),
+                     stringsAsFactors = FALSE)
+
+for (i in 1:numPA) {
+
+    #aPA => PubmedArticle 
+    aPA <- r[[i]]
+  
+    #aMC => MedlineCitation
+    aMC <- aPA[[1]]
+  
+    # atc => Article
+    atc <- aMC[[5]]
+    artd7 <- atc[[8]]
+    artd8 <- atc[[9]]
+    artd9 <- atc[[10]]
+    artd10 <- atc[[11]]
+    
+    artd7 <- atc[[8]]
+    if (!is.null(artd7)) {
+       artdName7 <- xmlName(artd7) 
+       if (!is.null(artdName7) & artdName7 == "ArticleDate") {
+        ad <- atc[[8]]
+       } else {
+         artd7 <- atc[[9]]
+         if (!is.null(artd7)) {
+           artdName7 <- xmlName(artd7) 
+           if (!is.null(artdName7) & artdName7 == "ArticleDate") {
+           ad <- atc[[9]]
+          } else {
+           artd7 <- atc[[10]]
+           if (!is.null(artd7)) {
+             artdName7 <- xmlName(artd7) 
+             if (!is.null(artd7) & artdName7 == "ArticleDate") {
+             ad <- atc[[10]]
+           } else {
+             artd7 <- atc[[11]]
+             if (!is.null(artd7)) {
+               artdName7 <- xmlName(artd7) 
+               if (!is.null(artdName7) & artdName7 == "ArticleDate") {
+               ad <- atc[[11]]
+               }
+             }
+            }  
+          } 
+        }
+           
+      }
+     }
+    }
+    
+    #now ad is the ArticleDate Node
+    adn <- xmlSize(ad)
+    year <- xmlValue(ad[[1]])
+    month <- xmlValue(ad[[2]])
+    day <- xmlValue(ad[[3]])
+
+    ArticleDate.df$Year[i] <- year
+    ArticleDate.df$Month[i] <- month
+    ArticleDate.df$Day[i] <- day
+    ArticleDate.df$ArticleDateID[i] <- paste0(year, month ,day)
+    Article.df$ArticleDateID <- ArticleDate.df$ArticleDateID
+}
+
+
+ArticleDate.df = ArticleDate.df[!duplicated(ArticleDate.df), ]
+
+ArticleDate.df
+```
+
+
+
+
+# Retrieve and add all attributes into Journal and Author related tables
+```{r}
+# Build Data Frames
+Journal.df <- data.frame (
+                      JournalID = vector (mode = "integer", 100),
+                      ISSNType = vector (mode = "character", 100),
+                      ISSN = vector (mode = "character", 100),
+                      JournalIssueID = vector (mode = "integer", 100),
+                      Title = vector (mode = "character", 100),
+                      ISOAbbreviation = vector (mode = "character", 100),
+                      stringsAsFactors = FALSE)
+
+JournalIssue.df <- data.frame(CitedMedium = vector(mode = "character", length = numPA),
+                              Volume = vector(mode = "integer", length = numPA),
+                              Issue = vector(mode = "integer", length = numPA),
+                              stringsAsFactors = FALSE
+                              )
+
+
+PubDate.df <- data.frame(PubDateID = vector(mode = "integer", length = numPA),
+                         Year = vector(mode = "integer", length = numPA),
+                         Month = vector(mode = "integer", length = numPA),
+                         stringsAsFactors = FALSE
+                         )
+                         
+AuthorList.df <- data.frame(AuthorListID = vector(mode = "integer", length = numPA),
+                            stringsAsFactors = FALSE
+                            )
+
+Author.df <- data.frame(LastName = vector(mode = "character", length = 1000),
+                        ForeName = vector(mode = "character", length = 1000),
+                        Initials = vector(mode = "character", length = 1000),
+                        Affiliation = vector(mode = "character", length = 1000),
+                        stringsAsFactors = FALSE)
+
+
+TempAuthorShip.df <- data.frame(LastName = vector(mode = "character", length = 1000),
+                        ForeName = vector(mode = "character", length = 1000),
+                        ArticleID = vector(mode = "integer", length = 1000),
+                        stringsAsFactors = FALSE)
+
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(file = fpn)
+
+# get the root node of the DOM tree
+r <- xmlRoot(xmlDOM)
+
+jn = 1
+jnli = 1
+pd = 1
+ali = 1
+
+numPA <- xmlSize(r)
+index = 0
+for (i in 1:numPA)
+{
+   aPA <- r[[i]]
+   aMC <- aPA[[1]]
+   aTC <- aMC[[5]]
+   
+   # aJN -> Journal
+   aJN <- aTC[[1]]
+   
+   # aJNT -> Journal Type
+   a <- xmlAttrs(aJN)
+   JournalType <- a[1]
+   
+   ISSN <- aJN[[1]]
+   #ISSN Type
+   if (is.null(ISSN)) {
+     ISSNAttribute <- ""
+     ISSNValue <- ""
+   } else {
+     ISSNAttribute <- xmlAttrs(ISSN)
+     if (is.null(ISSNAttribute)) {
+       ISSNAttribute <- ""
+     }
+     ISSNValue <- xmlValue(ISSN[[1]])
+   }   
+   
+   #Journal Title
+   J <- aJN[[3]]
+   JournalTitle <- xmlValue(J[[1]])
+   #ISO Abbreviation
+   I <- aJN[[4]]
+   ISO <- xmlValue(I[[1]])
+
+   #Journal Issue
+   JournalIssue <- aJN[[2]]
+ 
+   if (!is.null(JournalIssue)) {
+     #CitedMedium
+     CitedMedium <- xmlAttrs(JournalIssue)
+     #Volume
+     V <- JournalIssue[[1]]
+     Volume <- xmlValue(V[[1]])
+     #Issue
+     Issue <- xmlValue(JournalIssue[[2]])
+   } else {
+     CitedMedium <- ""
+     V <- ""
+     Volume <- ""
+     Issue <- ""
+   }
+   
+   #JournalPub Year
+   PubDate <- JournalIssue[[3]]
+   Year<- xmlValue(PubDate[[1]])
+   if (is.null(Year)) {
+     Year <- 0
+   }
+
+   #JournalPub Month
+   PubDate <- JournalIssue[[3]]
+   Month <- xmlValue(PubDate[[2]])
+   if (is.null(Month)) {
+     Month <- 0
+   }
+
+
+   #Write attributes to Journal Pubdate frame
+   PubDate.df$PubDateID[pd] <- paste0(Year, 0, Month)
+   PubDate.df$Year[pd] <- Year
+   PubDate.df$Month[pd] <- Month
+   pd = pd + 1
+   
+   
+   #Write attributes to Journal Issue data frame
+   JournalIssue.df$CitedMedium[jnli] <- CitedMedium
+   JournalIssue.df$Volume[jnli] <- Volume
+   JournalIssue.df$Issue[jnli] <- Issue
+   JournalIssue.df$JournalIssueID[jnli] <- paste0(CitedMedium, Volume, Issue)
+   JournalIssue.df$PubDateID[jnli] <- PubDate.df$PubDateID[pd - 1]
+
+   #getPubDateID for a Journal Issue
+   jnli = jnli + 1
+   
+
+   #Write Attributes to Journal data frame
+   Journal.df$ISSNType[jn] <- ISSNAttribute
+   Journal.df$ISSN[jn] <- ISSNValue
+   Journal.df$Title[jn] <- JournalTitle
+   Journal.df$ISOAbbreviation[jn] <- ISO
+   Journal.df$JournalIssueID[jn] <- JournalIssue.df$PubDateID[jnli - 1]
+   Journal.df$ArticleID[jn] <- i
+   jn = jn + 1
+
+   #Write attributes to Author List frame
+   AuthorList.df$AuthorListID[ali] <- i
+   ali = ali + 1
+
+   #AuthorList
+   AuthorList <- aTC[[6]]
+   numAuthor <- xmlSize(AuthorList)
+   
+   hasAuthors = 1
+   if (!is.null(AuthorList)) {
+     AuthorListName <- xmlName(AuthorList) 
+       if (!is.null(AuthorListName) & AuthorListName == "AuthorList") {
+         AuthorList <- aTC[[6]]
+       } else {
+          AuthorListName <- xmlName(AuthorList) 
+          AuthorList <- aTC[[7]]
+
+          if (!is.null(AuthorListName) & AuthorListName == "AuthorList") {
+            AuthorList <- aTC[[7]]
+          } else {
+            hasAuthors = 0
+          }
+       }
+   }
+   if (hasAuthors == 1) {
+   for (j in 1:numAuthor)
+   {
+      #Author
+      Author <- AuthorList[[j]]
+      #Last Name
+      LastName <- xmlValue(Author[[1]])
+
+      #Fore Name
+      ForeName <- xmlValue(Author[[2]])
+    
+      #Initials
+      Initials <- xmlValue(Author[[3]])
+      
+      #Affiliation
+      Affiliation <- xmlValue(Author[[4]])
+
+      if(is.null(Affiliation)) {
+         Affiliation <- ""
+      }
+      
+      if (!is.na(LastName) & !is.na(ForeName)) {
+       #Write attributes to Author frame
+        Author.df$LastName[index] <- na.omit(LastName)
+        Author.df$ForeName[index] <- na.omit(ForeName)
+        Author.df$Initials[index] <- na.omit(Initials)
+        Author.df$Affiliation[index] <- Affiliation
+        
+        TempAuthorShip.df$LastName[index] <- na.omit(LastName)
+        TempAuthorShip.df$ForeName[index] <- na.omit(ForeName)
+        TempAuthorShip.df$ArticleID[index] <- i
+
+        index = index + 1
+     }
+   }
+   }
+     
+}
+
+
+Author.df <- Author.df[!apply(is.na(Author.df) | Author.df == "", 1, all),]
+Author.df = Author.df[!duplicated(Author.df), ]
+Author.df$AuthorID <- seq(1,nrow(Author.df))
+
+TempAuthorShip.df <- TempAuthorShip.df[!apply(is.na(TempAuthorShip.df) | TempAuthorShip.df == "", 1, all),]
+TempAuthorShip.df = TempAuthorShip.df[!duplicated(TempAuthorShip.df), ]
+
+
+
+Journal.df <- Journal.df[!apply(is.na(Journal.df) | Journal.df == "", 1, all),]
+Journal.df = Journal.df[!duplicated(Journal.df), ]
+Journal.df$JournalID <- seq(1,nrow(Journal.df))
+
+
+Journal.df
+JournalIssue.df
+PubDate.df 
+AuthorList.df 
+Author.df
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Create Internal Data Frames: PubMedPubDate.df
+```{r}
+PubMedPubDate.df <- data.frame ( 
+                     PubStatus = vector (mode = "character", 100),
+                     Year = vector (mode = "integer", 100),
+                     Month = vector (mode = "integer", 100),
+                     Day = vector (mode = "integer", 100),
+                     stringsAsFactors = FALSE)
+
+PubMedPubDateTemp.df <- data.frame ( 
+                     PubStatus = vector (mode = "character", 100),
+                     Year = vector (mode = "integer", 100),
+                     Month = vector (mode = "integer", 100),
+                     Day = vector (mode = "integer", 100),
+                     ArticleID  = vector (mode = "integer", 100),
+                     stringsAsFactors = FALSE)
+
+index = 0
+for (i in 1:numPA) {
+
+    #aPA => PubmedArticle 
+    aPA <- r[[i]]
+  
+    #aPD => PubmedData
+    aPD <- aPA[[2]]
+    
+    #aHy => History
+    aHy <- aPD[[1]]
+
+    aHyn <- xmlSize(aHy)
+    
+    for (q in 1:aHyn) { # goes through each PubMedPubDate node
+      item <- aHy[[q]]
+      
+      status <- xmlAttrs(item)[1]
+      year <- xmlValue(item[[1]])
+      month <- xmlValue(item[[2]])
+      day <- xmlValue(item[[3]])
+
+      PubMedPubDate.df$PubStatus <- status
+      PubMedPubDate.df$Year[index] <- year
+      PubMedPubDate.df$Month[index] <- month
+      PubMedPubDate.df$Day[index] <- day
+      
+      PubMedPubDateTemp.df$PubStatus <- status
+      PubMedPubDateTemp.df$Year[index] <- year
+      PubMedPubDateTemp.df$Month[index] <- month
+      PubMedPubDateTemp.df$Day[index] <- day
+      PubMedPubDateTemp.df$ArticleID[index] <- i
+      index = index + 1
+    }
+}
+
+
+PubMedPubDate.df = PubMedPubDate.df[!duplicated(PubMedPubDate.df), ]
+PubMedPubDate.df$PubMedPubDateID <- seq(1,nrow(PubMedPubDate.df))
+
+PubMedPubDate.df
+```
+
+
+
+## Create Internal Data Frames: AuthorRecord.df
+```{r}
+AuthorRecord.df <- data.frame ( 
+                     AuthorRecordID = vector (mode = "integer", 164),
+                     AuthorListID = vector (mode = "integer", 164),
+                     AuthorID = vector (mode = "integer", 164),
+                     stringsAsFactors = FALSE)
+
+TempAuthor.df = merge(x = TempAuthorShip.df, y = Author.df)
+TempAuthor.df = TempAuthor.df[!duplicated(TempAuthor.df), ]
+
+
+ n <- nrow(TempAuthor.df)
+ for (t in 1:n) {
+    aID <- TempAuthor.df$AuthorID[t]
+    if (!is.null(aID) & aID != 0) {
+      AuthorRecord.df$AuthorID[t] <- aID
+      alid <- TempAuthor.df$ArticleID[t]
+      if (!is.null(alid) & alid != 0) {
+        AuthorRecord.df$AuthorListID[t] <- alid
+      } else {
+        AuthorRecord.df$AuthorListID[t] <- ""
+      }
+    } else {
+      AuthorRecord.df$AuthorID[t] <- ""
+    } 
+ }
+AuthorRecord.df$AuthorRecordID <- seq(1,nrow(AuthorRecord.df))
+AuthorRecord.df = AuthorRecord.df[!duplicated(AuthorRecord.df), ]
+
+
+AuthorRecord.df
+```
+
+
+## Create Internal Data Frames: HistoryPubInfo.df
+```{r}
+HistoryPubInfo.df <- data.frame ( 
+                     PubMedPubDateID = vector (mode = "integer", 100),
+                     ArticleID = vector (mode = "integer", 100),
+                     HistoryPubInfoID = vector (mode = "integer", 100),
+                     stringsAsFactors = FALSE)
+
+
+TempHistoryPub.df = merge(x = PubMedPubDateTemp.df, y = PubMedPubDate.df)
+TempHistoryPub.df = TempHistoryPub.df[!duplicated(TempHistoryPub.df), ]
+
+
+ n <- nrow(TempHistoryPub.df)
+ for (t in 1:n) {
+    aID <- TempHistoryPub.df$ArticleID[t]
+    if (!is.null(aID) & aID != 0) {
+      HistoryPubInfo.df$ArticleID[t] <- aID
+      
+      pmpd <- TempHistoryPub.df$PubMedPubDateID[t]
+      if (!is.null(pmpd) & pmpd != 0) {
+        HistoryPubInfo.df$PubMedPubDateID[t] <- pmpd
+      } else {
+        HistoryPubInfo.df$PubMedPubDateID[t] <- ""
+      }
+    } else {
+      HistoryPubInfo.df$ArticleID[t] <- ""
+    } 
+ }
+HistoryPubInfo.df$HistoryPubInfoID <- seq(1,nrow(HistoryPubInfo.df))
+HistoryPubInfo.df = HistoryPubInfo.df[!duplicated(HistoryPubInfo.df), ]
+
+HistoryPubInfo.df
+```
+
+
+
+```{r}
+Article.df
+```
+
+
+
+# Set foreign key constraint on
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON
+```
+
+
+
+
+# 1 Journal Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS journal
+```
+
+```{sql connection=dbcon}
+CREATE TABLE journal(
+   JournalID INTEGER NOT NULL,
+   ISSNType TEXT NOT NULL,
+   ISSN TEXT NOT NULL,
+   JournalIssueID INTEGER NOT NULL,
+   Title TEXT NOT NULL,
+   ISO Abbreviation TEXT NOT NULL,
+   ArticleID  INTEGER NOT NULL,
+   PRIMARY KEY (JournalID)
+   FOREIGN KEY (JournalIssueID) REFERENCES journal_issue (JournalIssueID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+      FOREIGN KEY (ArticleID) REFERENCES article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+
+
+
+
+# 3 JournalPubDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS journal_pub_date
+```
+
+```{sql connection=dbcon}
+CREATE TABLE journal_pub_date(
+   PubDateID VARCHAR NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   PRIMARY KEY (PubDateID)
+)
+```
+
+# 5 Author Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS author
+```
+
+```{sql connection=dbcon}
+CREATE TABLE author(
+   AuthorID INTEGER NOT NULL,
+   LastName TEXT NOT NULL,
+   FirstName TEXT NOT NULL,
+   Initals TEXT NOT NULL,
+   Affilication TEXT NOT NULL,
+   PRIMARY KEY (AuthorID)
+)
+```
+
+
+# 4 AuthorList Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS author_list
+```
+
+```{sql connection=dbcon}
+CREATE TABLE author_list(
+   AuthorListID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorListID)
+)
+```
+
+
+
+# 6 AuthorRecord Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS author_record
+```
+
+```{sql connection=dbcon}
+CREATE TABLE author_record(
+   AuthorRecordID INTEGER NOT NULL,
+   AuthorListID INTEGER NOT NULL,
+   AuthorID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorRecordID)
+   FOREIGN KEY (AuthorID) REFERENCES author (AuthorID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (AuthorListID) REFERENCES author_list (AuthorListID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+# 7 HistoryPubInfo Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS history_pub_info
+```
+
+```{sql connection=dbcon}
+CREATE TABLE history_pub_info(
+   PubMedPubDateID INTEGER NOT NULL,
+   HistoryPubInfoID INTEGER NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PRIMARY KEY (HistoryPubInfoID)
+   FOREIGN KEY (PubMedPubDateID) REFERENCES pub_ded_pub_date (PubMedPubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleID) REFERENCES article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+# 8 PubMedPubDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS pub_med_pub_date
+```
+
+```{sql connection=dbcon}
+CREATE TABLE pub_med_pub_date(
+   PubMedPubDateID INTEGER NOT NULL,
+   PubStatus TEXT NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   Day INTEGER NOT NULL,
+   PRIMARY KEY (PubMedPubDateID)
+)
+```
+
+
+# 9 ArticleDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS article_date
+```
+
+```{sql connection=dbcon}
+CREATE TABLE article_date(
+   ArticleDateID INTEGER NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   Day INTEGER NOT NULL,
+   PRIMARY KEY (ArticleDateID)
+)
+```
+
+
+# 10 Pagination Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS pagination
+```
+
+```{sql connection=dbcon}
+CREATE TABLE pagination(
+   PaginationID INTEGER NOT NULL,
+   MedlinePgn VARCHAR NOT NULL,
+   PRIMARY KEY (PaginationID)
+)
+```
+
+
+# 11 Abstract Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS abstract
+```
+
+```{sql connection=dbcon}
+CREATE TABLE abstract(
+   AbstractID INTEGER NOT NULL,
+   CopyRightInfo VARCHAR NOT NULL,
+   PRIMARY KEY (AbstractID)
+)
+```
+
+
+# 12 AbstractText Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS abstract_text
+```
+
+```{sql connection=dbcon}
+CREATE TABLE abstract_text(
+   AbstractID INTEGER NOT NULL,
+   AbstractTextID INTEGER NOT NULL,
+   Label VARCHAR NOT NULL,
+   NlmCategory VARCHAR NOT NULL,
+   TextContent VARCHAR NOT NULL,
+   PRIMARY KEY (AbstractTextID),
+   FOREIGN KEY (AbstractID) REFERENCES abstract (AbstractID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+)
+```
+
+
+
+# 13 Article Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS article
+```
+
+```{sql connection=dbcon}
+CREATE TABLE article(
+   ArticleID INTEGER NOT NULL,
+   AuthorListID INTEGER NOT NULL DEFAULT 0,
+   PaginationID INTEGER NOT NULL DEFAULT 0,
+   AbstractID INTEGER NOT NULL DEFAULT 0,
+   Language VARCHAR(30),
+   ArticleDateID INTEGER NOT NULL DEFAULT 0,
+   ArticleTitle CARCHAR(30),
+   PRIMARY KEY (ArticleID)
+   FOREIGN KEY (AuthorListID) REFERENCES author_list (AuthorListID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (PaginationID) REFERENCES pagination (PaginationID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (AbstractID) REFERENCES abstract (AbstractID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleDateID) REFERENCES article_date (ArticleDateID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+)
+```
+
+
+# 2 JournalIssue Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS journal_issue
+```
+
+```{sql connection=dbcon}
+CREATE TABLE journal_issue(
+   JournalIssueID VARCHAR NOT NULL,
+   CitedMedium TEXT NOT NULL,
+   Volume INTEGER NOT NULL,
+   Issue INTEGER NOT NULL,
+   PubDateID INTEGER NOT NULL,
+   PRIMARY KEY (JournalIssueID)
+   FOREIGN KEY (PubDateID) REFERENCES journal_pub_date (PubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+
+# 14 ELocationID Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS eLocation
+```
+
+```{sql connection=dbcon}
+CREATE TABLE eLocation(
+   ELocationIDNum INTEGER NOT NULL,
+   EIdType INTEGER NOT NULL,
+   Validation VARCHAR NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PRIMARY KEY (ELocationIDNum),
+   FOREIGN KEY (ArticleID) REFERENCES article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE  
+)
+```
+
+
+# 15 PublicationTypeList Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS publication_type_list
+```
+
+```{sql connection=dbcon}
+CREATE TABLE publication_type_list(
+   PublicationTypeCombinationID INTEGER NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PublicationType VARCHAR NOT NULL,
+   PRIMARY KEY (PublicationTypeCombinationID),
+   FOREIGN KEY (ArticleID) REFERENCES article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE  
+)
+```
+
+
+
+
+
+
+# write dataframe into SQL database
+```{r}
+dbWriteTable(dbcon, "pub_med_pub_date", PubMedPubDate.df, overwrite = T)
+dbWriteTable(dbcon, "article_date", ArticleDate.df, overwrite = T)
+dbWriteTable(dbcon, "publication_type_list", PublicationTypeList.df, overwrite = T)
+dbWriteTable(dbcon, "abstract_text", AbstractText.df, overwrite = T)
+dbWriteTable(dbcon, "abstract", Abstract.df, overwrite = T)
+
+dbWriteTable(dbcon, "pagination", Pagination.df, overwrite = T)
+
+
+
+dbWriteTable(dbcon, "elocation", ELocationID.df, overwrite = T)
+
+dbWriteTable(dbcon, "author_list", AuthorList.df, overwrite = T)
+dbWriteTable(dbcon, "author_record", AuthorRecord.df, overwrite = T)
+
+dbWriteTable(dbcon, "author", Author.df, overwrite = T)
+
+
+dbWriteTable(dbcon, "history_pub_info", HistoryPubInfo.df, overwrite = T)
+
+dbWriteTable(dbcon, "journal_pub_date", PubDate.df, overwrite = T)
+dbWriteTable(dbcon, "journal_issue", JournalIssue.df, overwrite = T)
+dbWriteTable(dbcon, "journal", Journal.df, overwrite = T)
+
+dbWriteTable(dbcon, "article", Article.df, overwrite = T)
+
+```
+
+
+```{sql connection=dbcon}
+SELECT * FROM article
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

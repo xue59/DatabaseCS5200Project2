@@ -1,0 +1,18 @@
+<Quarterreport>
+	<data>
+		<quarter>1st Quater</quarter>
+		<publication>6</publication>
+	</data>
+	<data>
+		<quarter>2nd Quater</quarter>
+		<publication>5</publication>
+	</data>
+	<data>
+		<quarter>3rd Quater</quarter>
+		<publication>4</publication>
+	</data>
+	<data>
+		<quarter>4th Quater</quarter>
+		<publication>3</publication>
+	</data>
+</Quarterreport>

@@ -1,0 +1,45 @@
+library(ggplot2)
+#p <- ggplot(mpg, aes(x=factor(cyl)))+ geom_bar(stat="count")
+library(XML)
+library(Hmisc)
+path <- "/Users/ZackXue/Desktop/CS5200 Project2/"
+xmlFile <- "pumbedxml.xml"
+fp <- paste0(path,xmlFile)
+
+xmlObj <- xmlParse(fp)
+xmlObjTree <- xmlTreeParse(fp)
+
+df <- xmlToDataFrame(fp, stringsAsFactors = FALSE)
+df$Year <- as.numeric(substring(df$Year,1))
+df$Month <- as.numeric(substring(df$Month,1))
+
+path <- "/Users/ZackXue/Desktop/CS5200 Project2/"
+xmlFile <- "xmlpumbed.xml"
+fp <- paste0(path,xmlFile)
+
+xmlObj <- xmlParse(fp)
+xmlObjTree <- xmlTreeParse(fp)
+
+df2 <- xmlToDataFrame(fp, stringsAsFactors = FALSE)
+df2$publication <- as.numeric(substring(df2$publication,1))
+
+
+```
+```{r}
+h <- hist(df$Month, 
+     xlim=c(0,12),
+     xlab="Month(Jan - Dec)",
+     ylab="Number of journals",
+     col="Gray",
+     main="Number of journal publications in 2012 by Month",
+     include.lowest = FALSE,
+     breaks = seq(from=0, to=13, by=1)
+     )
+
+barplot(t(as.matrix(df2$publication)),beside=TRUE,
+        main="Number of journal publications in 2012 by Quarter",
+        xlab="Quarters in 2012",
+        names.arg=df2$quarter,
+        col="yellow"
+        )
+```

@@ -1,0 +1,280 @@
+---
+title: "Practicum 2"
+output: html_notebook
+---
+
+
+# Create the SQlite file 
+```{r}
+library(RSQLite)
+
+fpath = "/Users/wangyichen/Desktop/"
+dbfile = "Practicum2.sqlite"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+
+```
+
+# Set foreign key constraint on
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON
+```
+
+# Drop table Article if it exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Article
+```
+
+# Create Table Article
+```{sql connection=dbcon}
+CREATE TABLE Article(
+   ArticleID INTEGER NOT NULL,
+   JournalID INTEGER NOT NULL DEFAULT 0,
+   AuthorListID INTEGER NOT NULL DEFAULT 0,
+   PaginationID INTEGER NOT NULL DEFAULT 0,
+   AbstractID INTEGER NOT NULL DEFAULT 0,
+   Language VARCHAR(30),
+   ArticleDateID INTEGER NOT NULL DEFAULT 0,
+   ArticleTitle CARCHAR(30),
+   PRIMARY KEY (ArticleID)
+   FOREIGN KEY (JournalID) REFERENCES Journal (JournalID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (AuthorListID) REFERENCES AuthorList (AuthorListID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (PaginationID) REFERENCES Pagination (PaginationID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (AbstractID) REFERENCES Abstract (AbstractID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleDateID) REFERENCES ArticleDate (ArticleDateID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+)
+```
+
+# Drop Journal Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journal
+```
+
+# Create Table Journal
+```{sql connection=dbcon}
+CREATE TABLE Journal(
+   JournalID INTEGER NOT NULL,
+   ISSNType TEXT NOT NULL,
+   ISSN TEXT NOT NULL,
+   JournalIssueID INTEGER NOT NULL,
+   Title TEXT NOT NULL,
+   ISO Abbreviation TEXT NOT NULL,
+   PRIMARY KEY (JournalID)
+   FOREIGN KEY (JournalIssueID) REFERENCES JournalIssue (JournalIssueID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# Drop Journal Issue Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS JournalIssue
+```
+
+# Create Table Journal Issue
+```{sql connection=dbcon}
+CREATE TABLE JournalIssue(
+   JournalIssueID INTEGER NOT NULL,
+   CitedMedium TEXT NOT NULL,
+   Volume INTEGER NOT NULL,
+   Issue INTEGER NOT NULL,
+   PubDateID INTEGER NOT NULL,
+   PRIMARY KEY (JournalIssueID)
+   FOREIGN KEY (PubDateID) REFERENCES JournalPubDate (PubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# Create Table Pub Date
+```{sql connection=dbcon}
+CREATE TABLE JournalPubDate(
+   PubDateID INTEGER NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   PRIMARY KEY (PubDateID)
+)
+```
+
+# Drop Author Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+# Create Table Author List
+```{sql connection=dbcon}
+CREATE TABLE AuthorList(
+   AuthorListID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorListID)
+)
+```
+
+# Drop Author Details Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+# Create Table Author 
+```{sql connection=dbcon}
+CREATE TABLE Author(
+   AuthorID INTEGER NOT NULL,
+   LastName TEXT NOT NULL,
+   FirstName TEXT NOT NULL,
+   Initals TEXT NOT NULL,
+   Affilication TEXT NOT NULL,
+   PRIMARY KEY (AuthorID)
+)
+
+```
+
+# Drop History Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS History
+```
+
+# Create Table History
+```{sql connection=dbcon}
+CREATE TABLE HistoryPubInfo(
+   PubMedPubDateID INTEGER NOT NULL,
+   HistoryPubInfoID INTEGER NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PRIMARY KEY (HistoryPubInfoID)
+   FOREIGN KEY (PubMedPubDateID) REFERENCES PubMedPubDate (PubMedPubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleID) REFERENCES Article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+
+```
+
+# Drop Pub Date Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PubDetails
+```
+
+# Create Table PubDate
+```{sql connection=dbcon}
+CREATE TABLE PubMedPubDate(
+   PubMedPubDateID INTEGER NOT NULL,
+   PubStatus TEXT NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   Day INTEGER NOT NULL,
+   PRIMARY KEY (PubDetailsID)
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Part 3 starts from here
+
+# Load Libraries for parsing
+```{r loadLibraries}
+library(XML)
+
+library(RSQLite)
+library(DBI)
+library(knitr)
+```
+
+# Set up filenames and paths
+```{r filenames}
+path <- "/Users/wangyichen/Desktop/Practicum2/"
+fn <- "pubmed_sample.xml"
+fpn = paste0(path, fn)
+dbfn <- "practicum2.db"
+dbfpn = paste0(path, dbfn)
+```
+
+# Load XML into Document Object Model (DOM)
+```{r}
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(file = fpn)
+
+# get the root node of the DOM tree
+r <- xmlRoot(xmlDOM)
+```
+
+# Create the internal dataframe
+```{r createDFs}
+# Count the number of children node
+numArticle <- xmlSize(r)
+
+# Create various data frames to hold data
+Article.df <- data.frame (ArticleID = vector (mode = "integer", length = numArticle),
+                          PMID = vector(mode = "integer", length = numArticle),
+                          PubModel = vector(mode = "character", length = numArticle),
+                          ArticleTitle = vector(mode = "character", length = numArticle),
+                          AuthorListID = vector(mode = "integer", length = numArticle),
+                          HistoryID = vector(mode = "integer", length = numArticle),
+                          stringAsFactors = F
+                          )
+                          
+
+Journal.df <- data.frame(JournalID = vector(mode = "integer", length = numArticle),
+                         ISSNType = vector(mode = "character", length = numArticle),
+                         ISSN = vector(mode = "character", length = numArticle),
+                         JournalIssueID = vector(mode = "integer", length = numArticle),
+                         Title = vector(mode = "character", length = numArticle),
+                         ISOAbbreviation = vector(mode = "character", length = numArticle),
+                         stringsAsFactors = F
+                         )
+
+JournalIssue.df <- data.frame(JournalIssueID = vector(mode = "integer", length = numArticle),
+                              CitedMedium = vector(mode = "character", length = numArticle),
+                              Volume = vector(mode = "integer", length = numArticle),
+                              Issue = vector(mode = "integer", length = numArticle),
+                              PubDateID = integer(),
+                              stringsAsFactors = F
+                              )
+
+PubDate.df <- data.frame(PubDateID = integer(),
+                         Year = integer(),
+                         Date = integer(),
+                         stringsAsFactors = F
+                         )
+
+AuthorList.df <- data.frame(AuthorListID = vector(mode = "integer", length = numArticle),
+                            AuthorID = integer(),
+                            stringsAsFactors = F
+                            )
+
+History.df <- data.frame(HistoryID = vector(mode = "integer", length = numArticle),
+                         PubDetailsID = vector(mode = "integer", length = numArticle),
+                         stringsAsFactors = F
+                         )
+
+PubDetails.df <- data.frame(PubDetailsID = vector(mode = "integer", length = numArticle),
+                            PubStatus = character(),
+                            Year = integer(),
+                            Month = integer(),
+                            Day = integer(),
+                            stringsAsFactors = F
+                            )
+
+```

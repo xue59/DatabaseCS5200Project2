@@ -1,0 +1,194 @@
+---
+title: "Practicum 2"
+output: html_notebook
+---
+
+
+# Create the SQlite file 
+```{r}
+library(RSQLite)
+
+fpath = "/Users/wangyichen/Desktop/"
+dbfile = "Practicum2.sqlite"
+
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+
+```
+
+# Set foreign key constraint on
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON
+```
+
+# Drop table Article if it exists
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Article
+```
+
+# Create Table Article
+```{sql connection=dbcon}
+CREATE TABLE Article(
+   ArticleID INTEGER NOT NULL,
+   JournalID INTEGER NOT NULL,
+   Pagination TEXT NOT NULL,
+   ELocationID TEXT NOT NULL,
+   Abstract TEXT NOT NULL,
+   AuthorID INTEGER NOT NULL,
+   Language TEXT NOT NULL,
+   PublicationListID INTEGER NOT NULL,
+   ArticleDate NOT NULL,
+   HistoryID INTEGER NOT NULL,
+   PRIMARY KEY (ArticleID)
+   FOREIGN KEY (JournalID) REFERENCES Journal (JournalID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (Pagination) REFERENCES Pagination (Pagination)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (AuthorID) REFERENCES Author (AuthorID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (PublicationListID) REFERENCES PublicationTypeList (number)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (HistoryID) REFERENCES History (HistoryID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# Drop Journal Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journal
+```
+
+# Create Table Journal
+```{sql connection=dbcon}
+CREATE TABLE Journal(
+   JournalID INTEGER NOT NULL,
+   ISSNType TEXT NOT NULL,
+   ISSN TEXT NOT NULL,
+   JournalIssueID INTEGER NOT NULL,
+   Title TEXT NOT NULL,
+   ISO Abbreviation TEXT NOT NULL,
+   PRIMARY KEY (JournalID)
+   FOREIGN KEY (JournalIssueID) REFERENCES JournalIssue (JournalIssueID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# Drop Journal Issue Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS JournalIssue
+```
+
+# Create Table Journal Issue
+```{sql connection=dbcon}
+CREATE TABLE JournalIssue(
+   JournalIssueID INTEGER NOT NULL,
+   IssueType TEXT NOT NULL,
+   Volume INTEGER NOT NULL,
+   Issue INTEGER NOT NULL,
+   PubDate DATE NOT NULL,
+   PRIMARY KEY (JournalIssueID)
+)
+```
+
+# Drop Author Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+# Create Table Author
+```{sql connection=dbcon}
+CREATE TABLE Author(
+   AuthorID INTEGER NOT NULL,
+   AuthorDetailsID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorID)
+   FOREIGN KEY (AuthorDetailsID) REFERENCES AuthorDetails (AuthorDetailsID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# Drop Author Details Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AuthorDetails
+```
+
+# Create Table Author Details
+```{sql connection=dbcon}
+CREATE TABLE AuthorDetails(
+   AuthorDetailsID INTEGER NOT NULL,
+   LastName TEXT NOT NULL,
+   FirstName TEXT NOT NULL,
+   Initals TEXT NOT NULL,
+   PRIMARY KEY (AuthorDetailsID)
+)
+
+```
+
+# Drop History Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS History
+```
+
+# Create Table History
+```{sql connection=dbcon}
+CREATE TABLE History(
+   HistoryID INTEGER NOT NULL,
+   PubDateID INTEGER NOT NULL,
+   PRIMARY KEY (HistoryID)
+   FOREIGN KEY (PubDateID) REFERENCES PubDate (PubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+
+```
+
+# Drop Pub Date Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PubDate
+```
+
+# Create Table PubDate
+```{sql connection=dbcon}
+CREATE TABLE PubDate(
+   PubDateID INTEGER NOT NULL,
+   PubStatus TEXT NOT NULL,
+   PubDate DATE NOT NULL,
+   PRIMARY KEY (PubDateID)
+)
+```
+
+# Drop Publication Type List Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PublicationTypeList
+```
+
+# Create Table Publication Type List
+```{sql connection=dbcon}
+CREATE TABLE PublicationTypeList(
+   PublicationListID INTEGER NOT NULL,
+   PublicationType TEXT NOT NULL,
+   PRIMARY KEY (PublicationListID)
+)
+```
+
+# Drop Pagination Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Pagination
+```
+
+# Create Table Pagination
+```{sql connection=dbcon}
+CREATE TABLE Pagination(
+   Pagination TEXT NOT NULL,
+   MedlinePgn TEXT NOT NULL,
+   PRIMARY KEY (Pagination)
+)
+```
+
+
+

@@ -1,0 +1,111 @@
+```{r}
+library(XML)
+library(RSQLite)
+library(DBI)
+library(knitr)
+```
+
+
+```{r}
+path <- "~/Downloads/"
+fn <- "pubmed_sample.xml"
+fpn = paste0(path, fn)
+```
+
+
+```{r}
+path <- "C:/Users/HP/Downloads/" 
+xmlFile <- "pubmed_sample.xml"
+fp <- paste0(path,xmlFile)
+
+xmlObj <- xmlParse(fp)
+xmlObjTree <- xmlTreeParse(fp)
+```
+
+
+```{r}
+# Reading the XML file and parse into DOM
+xmlDOM <- xmlParse(fp)
+# get the root node of the DOM tree
+r <- xmlRoot(xmlDOM)
+```
+
+
+
+```{r}
+numPA <- xmlSize(r)
+# should be 19
+```
+
+
+```{r}
+Journal.df <- data.frame (JournalID = vector (mode = "integer", numPA),
+                  ISSNType = vector (mode = "character", numPA),
+                  ISSN = vector (mode = "character", numPA),
+                  CitedMedium = vector (mode = "character", numPA),
+                  Volume = vector (mode = "integer", numPA),
+                  Issue = vector (mode = "integer", numPA),
+                  PubDateDate = vector (mode = "integer", numPA),
+                  Title = vector (mode = "character", numPA),
+                   ISOAbbreviation = vector (mode = "character", numPA),
+                  stringsAsFactors = F)
+
+```
+
+
+
+
+```{r}
+AuthorList <- data.frame (AuthorListID = vector (mode = "integer", numPA),
+                  LastName = vector (mode = "character", numPA),
+                  FirstName = vector (mode = "character", numPA),
+                  Initals = vector (mode = "character", numPA),
+                  Afflication = vector (mode = "character", numPA),
+                  stringsAsFactors = F)
+
+```
+
+
+```{r}
+History <- data.frame (HistoryID = vector (mode = "integer", numPA),
+                  PubStatus = vector (mode = "character", numPA),
+                  Year = vector (mode = "integer", numPA),
+                  Month = vector (mode = "integer", numPA),
+                  Day = vector (mode = "integer", numPA),
+                  stringsAsFactors = F)
+
+```
+
+
+```{r}
+History <- data.frame (Pagination = vector (mode = "character", numPA),
+                  MedlinePgn = vector (mode = "character", numPA),
+                  EIdType = vector (mode = "character", numPA),
+                  Validation = vector (mode = "character", numPA),
+                  stringsAsFactors = F)
+
+```
+
+
+
+
+
+```{r}
+Abstract <- data.frame (AbstractID = vector (mode = "integer", numPA),
+                  Label = vector (mode = "character", numPA),
+                  NlmCategory = vector (mode = "character", numPA),
+                  Text = vector (mode = "character", numPA),
+                  stringsAsFactors = F)
+
+```
+
+
+
+```{r}
+ArticleDate <- data.frame (ArticleDateID = vector (mode = "integer", numPA),
+                  Year = vector (mode = "integer", numPA),
+                  Month = vector (mode = "integer", numPA),
+                  Day = vector (mode = "integer", numPA),
+                  stringsAsFactors = F)
+
+```

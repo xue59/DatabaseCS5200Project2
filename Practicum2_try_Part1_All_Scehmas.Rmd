@@ -1,0 +1,309 @@
+---
+title: "Practicum2 Part1 Schemas"
+output: html_notebook
+---
+
+
+# Create the SQlite file 
+```{r}
+library(RSQLite)
+fpath = "~/Downloads/"
+dbfile = "prac2_try.sqlite"
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+
+# Set foreign key constraint on
+```{sql connection=dbcon}
+PRAGMA foreign_keys = ON
+```
+
+
+# 1 Journal Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Journal
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Journal(
+   JournalID INTEGER NOT NULL,
+   ISSNType TEXT NOT NULL,
+   ISSN TEXT NOT NULL,
+   JournalIssueID INTEGER NOT NULL,
+   Title TEXT NOT NULL,
+   ISO Abbreviation TEXT NOT NULL,
+   PRIMARY KEY (JournalID)
+   FOREIGN KEY (JournalIssueID) REFERENCES JournalIssue (JournalIssueID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+# 2 JournalIssue Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS JournalIssue
+```
+
+```{sql connection=dbcon}
+CREATE TABLE JournalIssue(
+   JournalIssueID INTEGER NOT NULL,
+   CitedMedium TEXT NOT NULL,
+   Volume INTEGER NOT NULL,
+   Issue INTEGER NOT NULL,
+   PubDateID INTEGER NOT NULL,
+   PRIMARY KEY (JournalIssueID)
+   FOREIGN KEY (PubDateID) REFERENCES JournalPubDate (PubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+# 3 JournalPubDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS JournalPubDate
+```
+
+```{sql connection=dbcon}
+CREATE TABLE JournalPubDate(
+   PubDateID INTEGER NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   PRIMARY KEY (PubDateID)
+)
+```
+
+
+# 4 AuthorList Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AuthorList
+```
+
+```{sql connection=dbcon}
+CREATE TABLE AuthorList(
+   AuthorListID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorListID)
+)
+```
+
+
+# 5 Author Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Author
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Author(
+   AuthorID INTEGER NOT NULL,
+   LastName TEXT NOT NULL,
+   FirstName TEXT NOT NULL,
+   Initals TEXT NOT NULL,
+   Affilication TEXT NOT NULL,
+   PRIMARY KEY (AuthorID)
+)
+```
+
+
+# 6 AuthorRecord Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AuthorRecord
+```
+
+```{sql connection=dbcon}
+CREATE TABLE AuthorRecord(
+   AuthorRecordID INTEGER NOT NULL,
+   AuthorListID INTEGER NOT NULL,
+   AuthorID INTEGER NOT NULL,
+   PRIMARY KEY (AuthorRecordID)
+   FOREIGN KEY (AuthorID) REFERENCES Author (AuthorID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (AuthorListID) REFERENCES AuthorList (AuthorListID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+# 7 HistoryPubInfo Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS HistoryPubInfo
+```
+
+```{sql connection=dbcon}
+CREATE TABLE HistoryPubInfo(
+   PubMedPubDateID INTEGER NOT NULL,
+   HistoryPubInfoID INTEGER NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PRIMARY KEY (HistoryPubInfoID)
+   FOREIGN KEY (PubMedPubDateID) REFERENCES PubMedPubDate (PubMedPubDateID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleID) REFERENCES Article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE
+)
+```
+
+
+# 8 PubMedPubDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PubMedPubDate
+```
+
+```{sql connection=dbcon}
+CREATE TABLE PubMedPubDate(
+   PubMedPubDateID INTEGER NOT NULL,
+   PubStatus TEXT NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   Day INTEGER NOT NULL,
+   PRIMARY KEY (PubMedPubDateID)
+)
+```
+
+
+# 9 ArticleDate Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS ArticleDate
+```
+
+```{sql connection=dbcon}
+CREATE TABLE ArticleDate(
+   ArticleDateID INTEGER NOT NULL,
+   Year INTEGER NOT NULL,
+   Month INTEGER NOT NULL,
+   Day INTEGER NOT NULL,
+   PRIMARY KEY (ArticleDateID)
+)
+```
+
+
+# 10 Pagination Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Pagination
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Pagination(
+   PaginationID INTEGER NOT NULL,
+   MedlinePgn VARCHAR NOT NULL,
+   PRIMARY KEY (PaginationID)
+)
+```
+
+
+# 11 Abstract Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Abstract
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Abstract(
+   AbstractID INTEGER NOT NULL,
+   CopyRightInfo VARCHAR NOT NULL,
+   PRIMARY KEY (AbstractID)
+)
+```
+
+
+# 12 AbstractText Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS AbstractText
+```
+
+```{sql connection=dbcon}
+CREATE TABLE AbstractText(
+   AbstractID INTEGER NOT NULL,
+   AbstractTextID INTEGER NOT NULL,
+   Label VARCHAR NOT NULL,
+   NlmCategory VARCHAR NOT NULL,
+   TextContent VARCHAR NOT NULL,
+   PRIMARY KEY (AbstractTextID),
+   FOREIGN KEY (AbstractID) REFERENCES Abstract (AbstractID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+)
+```
+
+
+
+# 13 Article Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Article
+```
+
+```{sql connection=dbcon}
+CREATE TABLE Article(
+   ArticleID INTEGER NOT NULL,
+   JournalID INTEGER NOT NULL DEFAULT 0,
+   AuthorListID INTEGER NOT NULL DEFAULT 0,
+   PaginationID INTEGER NOT NULL DEFAULT 0,
+   AbstractID INTEGER NOT NULL DEFAULT 0,
+   Language VARCHAR(30),
+   ArticleDateID INTEGER NOT NULL DEFAULT 0,
+   ArticleTitle CARCHAR(30),
+   PRIMARY KEY (ArticleID)
+   FOREIGN KEY (JournalID) REFERENCES Journal (JournalID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (AuthorListID) REFERENCES AuthorList (AuthorListID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (PaginationID) REFERENCES Pagination (PaginationID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (AbstractID) REFERENCES Abstract (AbstractID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+   FOREIGN KEY (ArticleDateID) REFERENCES ArticleDate (ArticleDateID)
+     ON DELETE SET DEFAULT
+     ON UPDATE CASCADE
+)
+```
+
+
+# 14 ELocationID Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS ELocationID
+```
+
+```{sql connection=dbcon}
+CREATE TABLE ELocationID(
+   ELocationIDNum INTEGER NOT NULL,
+   EIdType INTEGER NOT NULL,
+   Validation VARCHAR NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PRIMARY KEY (ELocationIDNum),
+   FOREIGN KEY (ArticleID) REFERENCES Article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE  
+)
+```
+
+
+# 15 PublicationTypeList Table
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS PublicationTypeList
+```
+
+```{sql connection=dbcon}
+CREATE TABLE PublicationTypeList(
+   PublicationTypeCombinationID INTEGER NOT NULL,
+   ArticleID INTEGER NOT NULL,
+   PublicationType VARCHAR NOT NULL,
+   PRIMARY KEY (PublicationTypeCombinationID),
+   FOREIGN KEY (ArticleID) REFERENCES Article (ArticleID)
+     ON DELETE CASCADE
+     ON UPDATE CASCADE  
+)
+```
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
